@@ -166,3 +166,22 @@ def close_task(
     completed_task["completed_at"] = _now_iso()
     storage.save_task(completed_task, data_dir)
     return completed_task
+
+
+def add_comment(
+    task: dict[str, Any], text: str, data_dir: Path = storage.DATA_DIR
+) -> dict[str, Any]:
+    if task.get("status") == "completed":
+        raise InputValidationError("Нельзя добавлять комментарии к завершённому делу.")
+    if not isinstance(text, str) or not text.strip():
+        raise InputValidationError("Введите текст комментария.")
+    updated_task = deepcopy(task)
+    updated_task["comments"].append(
+        {
+            "id": str(uuid4()),
+            "text": text.strip(),
+            "created_at": _now_iso(),
+        }
+    )
+    storage.save_task(updated_task, data_dir)
+    return updated_task

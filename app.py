@@ -47,6 +47,18 @@ def _save_draft(draft_key: str, task_id: str | None) -> None:
         st.session_state[_widget_key("draft_error", draft_key)] = str(error)
 
 
+def _add_comment(task: dict, task_id: str) -> None:
+    comment_key = f"new_comment_{task_id}"
+    error_key = f"comment_error_{task_id}"
+    try:
+        services.add_comment(task, st.session_state[comment_key])
+        st.session_state[comment_key] = ""
+        st.session_state.pop(error_key, None)
+        st.session_state["flash_message"] = "Комментарий добавлен."
+    except (OSError, ValueError) as error:
+        st.session_state[error_key] = str(error)
+
+
 def _initialize_editor(draft_key: str, task: dict | None) -> dict[str, str] | None:
     title_key = _widget_key("title", draft_key)
     problem_key = _widget_key("load_problem", draft_key)
@@ -193,7 +205,7 @@ draft_error = st.session_state.get(_widget_key("draft_error", selected_id))
 if draft_error:
     st.error(f"Не удалось сохранить черновик: {draft_error}")
 elif is_completed:
-    st.caption("Завершённое дело доступно только для просмотра.")
+    st.caption("Поля завершённого дела доступны только для просмотра.")
 else:
     st.caption("Изменения полей автоматически сохраняются в локальный черновик.")
 
@@ -231,3 +243,30 @@ if close_clicked:
         st.rerun()
     except (OSError, ValueError) as error:
         st.error(str(error))
+
+if selected_task is not None:
+    st.divider()
+    st.subheader("Комментарии")
+
+    if selected_task["comments"]:
+        for comment in selected_task["comments"]:
+            created_at = datetime.fromisoformat(comment["created_at"])
+            st.caption(created_at.astimezone().strftime("%d.%m.%Y, %H:%M"))
+            st.write(comment["text"])
+    else:
+        st.caption("Комментариев пока нет.")
+
+    if is_completed:
+        st.caption("К завершённому делу нельзя добавлять комментарии.")
+    else:
+        comment_key = f"new_comment_{selected_id}"
+        error_key = f"comment_error_{selected_id}"
+        st.text_area("Новый комментарий", key=comment_key)
+        st.button(
+            "Добавить комментарий",
+            key=f"add_comment_{selected_id}",
+            on_click=_add_comment,
+            args=(selected_task, selected_id),
+        )
+        if error_key in st.session_state:
+            st.error(st.session_state[error_key])
