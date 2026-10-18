@@ -89,6 +89,10 @@ def _clear_editor(draft_key: str) -> None:
             del st.session_state[key]
 
 
+def _reload_selected_editor() -> None:
+    _clear_editor(st.session_state["selected_task_id"])
+
+
 storage.init_storage()
 tasks, problems = storage.load_tasks()
 open_tasks = sorted(
@@ -138,6 +142,7 @@ selected_id = st.sidebar.radio(
     options,
     key="selected_task_id",
     format_func=_task_label,
+    on_change=_reload_selected_editor,
 )
 
 selected_task = tasks_by_id.get(selected_id)
@@ -244,6 +249,7 @@ if save_clicked:
 if close_clicked:
     try:
         services.close_task(selected_task)
+        _clear_editor(selected_id)
         st.session_state["flash_message"] = "Дело закрыто."
         st.rerun()
     except (OSError, ValueError) as error:

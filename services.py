@@ -30,11 +30,13 @@ def new_editor_values() -> dict[str, Any]:
 def _draft_date_error(draft: dict[str, Any]) -> str | None:
     try:
         promised_at = datetime.fromisoformat(draft["promised_at"])
-        date.fromisoformat(draft["deadline"])
+        deadline = date.fromisoformat(draft["deadline"])
     except (TypeError, ValueError):
         return "черновик содержит некорректную дату обещания или дедлайн"
     if promised_at.tzinfo is None:
         return "в дате обещания черновика отсутствует часовой пояс"
+    if deadline < promised_at.date():
+        return "дедлайн в черновике раньше даты обещания"
     return None
 
 
@@ -44,7 +46,7 @@ def load_editor_values(
     data_dir: Path = storage.DATA_DIR,
 ) -> tuple[dict[str, Any], dict[str, str] | None]:
     draft, problem = storage.load_draft(draft_key, data_dir)
-    if draft is not None:
+    if draft is not None and not (task is not None and task.get("status") == "completed"):
         date_error = _draft_date_error(draft)
         if date_error is None:
             return draft, None
@@ -72,6 +74,14 @@ def save_editor_draft(
     deadline: str,
     data_dir: Path = storage.DATA_DIR,
 ) -> dict[str, Any]:
+    try:
+        promised_date = datetime.fromisoformat(promised_at).date()
+        deadline_date = date.fromisoformat(deadline)
+    except ValueError:
+        pass
+    else:
+        if deadline_date < promised_date:
+            raise InputValidationError("Дедлайн не может быть раньше даты обещания.")
     draft = {
         "task_id": task_id,
         "title": title,
@@ -109,9 +119,12 @@ def _validate_fields(values: dict[str, Any]) -> dict[str, str]:
     if not isinstance(deadline, str):
         raise InputValidationError("Укажите дедлайн.")
     try:
-        normalized_deadline = date.fromisoformat(deadline).isoformat()
+        parsed_deadline = date.fromisoformat(deadline)
     except ValueError as error:
         raise InputValidationError("Укажите корректный дедлайн.") from error
+    if parsed_deadline < promised.date():
+        raise InputValidationError("Дедлайн не может быть раньше даты обещания.")
+    normalized_deadline = parsed_deadline.isoformat()
 
     return {
         "title": title,
@@ -161,6 +174,7 @@ def close_task(
 ) -> dict[str, Any]:
     if task.get("status") == "completed":
         return deepcopy(task)
+    _validate_fields(task)
     completed_task = deepcopy(task)
     completed_task["status"] = "completed"
     completed_task["completed_at"] = _now_iso()
