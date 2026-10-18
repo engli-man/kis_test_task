@@ -185,3 +185,17 @@ def add_comment(
     )
     storage.save_task(updated_task, data_dir)
     return updated_task
+
+
+def search_tasks(tasks: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    if not isinstance(query, str):
+        raise InputValidationError("Поисковый запрос должен быть строкой.")
+    normalized_query = query.strip().casefold()
+    if not normalized_query:
+        return list(tasks)
+    return [
+        task
+        for task in tasks
+        if normalized_query in task["title"].casefold()
+        or normalized_query in task["description"].casefold()
+    ]

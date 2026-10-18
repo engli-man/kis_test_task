@@ -115,9 +115,6 @@ if problems:
     for problem in problems:
         st.error(f"{problem['file']}: {problem['error']}")
 
-options = ["new", *tasks_by_id]
-
-
 def _task_label(task_id: str) -> str:
     if task_id == "new":
         return "＋ Новое дело"
@@ -128,6 +125,14 @@ def _task_label(task_id: str) -> str:
 
 
 st.sidebar.header("Дела")
+search_query = st.sidebar.text_input("Поиск по названию и описанию")
+visible_tasks = services.search_tasks(tasks, search_query)
+options = ["new", *(task["id"] for task in visible_tasks)]
+if st.session_state.get("selected_task_id") not in options:
+    st.session_state["selected_task_id"] = "new"
+if search_query and not visible_tasks:
+    st.sidebar.caption("Дела не найдены.")
+
 selected_id = st.sidebar.radio(
     "Выберите дело",
     options,
