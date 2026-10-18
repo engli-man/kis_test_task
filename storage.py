@@ -12,7 +12,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 
 class InvalidDataError(ValueError):
-    """Файл содержит данные неподдерживаемой структуры."""
+    pass
 
 
 def _storage_paths(data_dir: Path) -> tuple[Path, Path]:
@@ -56,7 +56,6 @@ def _is_date(value: Any) -> bool:
 
 
 def validate_task(task: Any) -> None:
-    """Проверить обязательные поля и типы сохранённого дела."""
     if not isinstance(task, dict):
         raise InvalidDataError("корневая структура должна быть объектом")
 
@@ -109,7 +108,6 @@ def validate_task(task: Any) -> None:
 
 
 def validate_draft(draft: Any) -> None:
-    """Проверить структуру черновика, не проверяя ещё не завершённый ввод."""
     if not isinstance(draft, dict):
         raise InvalidDataError("корневая структура черновика должна быть объектом")
 
@@ -156,7 +154,6 @@ def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def save_task(task: dict[str, Any], data_dir: Path = DATA_DIR) -> Path:
-    """Проверить и атомарно сохранить дело."""
     validate_task(task)
     init_storage(data_dir)
     tasks_dir, _ = _storage_paths(data_dir)
@@ -173,7 +170,6 @@ def save_task(task: dict[str, Any], data_dir: Path = DATA_DIR) -> Path:
 
 
 def load_task(path: Path) -> dict[str, Any]:
-    """Прочитать и проверить один файл дела."""
     with path.open(encoding="utf-8") as source:
         task = json.load(source)
     validate_task(task)
@@ -183,7 +179,6 @@ def load_task(path: Path) -> dict[str, Any]:
 
 
 def load_tasks(data_dir: Path = DATA_DIR) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    """Загрузить корректные дела и отдельно вернуть сведения об ошибках."""
     init_storage(data_dir)
     tasks_dir, _ = _storage_paths(data_dir)
     tasks: list[dict[str, Any]] = []
@@ -205,7 +200,6 @@ def _validate_draft_key(draft_key: str) -> None:
 def save_draft(
     draft_key: str, draft: dict[str, Any], data_dir: Path = DATA_DIR
 ) -> Path:
-    """Проверить и атомарно сохранить черновик."""
     _validate_draft_key(draft_key)
     validate_draft(draft)
     if draft_key == "new" and draft["task_id"] is not None:
@@ -229,7 +223,6 @@ def save_draft(
 def load_draft(
     draft_key: str, data_dir: Path = DATA_DIR
 ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
-    """Загрузить черновик; ошибку вернуть отдельно, не меняя файл."""
     _validate_draft_key(draft_key)
     init_storage(data_dir)
     _, drafts_dir = _storage_paths(data_dir)
@@ -250,7 +243,6 @@ def load_draft(
 
 
 def delete_draft(draft_key: str, data_dir: Path = DATA_DIR) -> None:
-    """Удалить черновик после успешного сохранения основного дела."""
     _validate_draft_key(draft_key)
     _, drafts_dir = _storage_paths(data_dir)
     (drafts_dir / f"{draft_key}.json").unlink(missing_ok=True)

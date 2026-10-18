@@ -8,7 +8,7 @@ import storage
 
 
 class InputValidationError(ValueError):
-    """Пользователь ввёл некорректные данные."""
+    pass
 
 
 def _now_iso() -> str:
@@ -16,7 +16,6 @@ def _now_iso() -> str:
 
 
 def new_editor_values() -> dict[str, Any]:
-    """Вернуть начальные значения редактора нового дела."""
     now = datetime.now().astimezone()
     return {
         "task_id": None,
@@ -28,15 +27,28 @@ def new_editor_values() -> dict[str, Any]:
     }
 
 
+def _draft_date_error(draft: dict[str, Any]) -> str | None:
+    try:
+        promised_at = datetime.fromisoformat(draft["promised_at"])
+        date.fromisoformat(draft["deadline"])
+    except (TypeError, ValueError):
+        return "черновик содержит некорректную дату обещания или дедлайн"
+    if promised_at.tzinfo is None:
+        return "в дате обещания черновика отсутствует часовой пояс"
+    return None
+
+
 def load_editor_values(
     draft_key: str,
     task: dict[str, Any] | None = None,
     data_dir: Path = storage.DATA_DIR,
 ) -> tuple[dict[str, Any], dict[str, str] | None]:
-    """Восстановить черновик или подготовить поля из сохранённого дела."""
     draft, problem = storage.load_draft(draft_key, data_dir)
     if draft is not None:
-        return draft, None
+        date_error = _draft_date_error(draft)
+        if date_error is None:
+            return draft, None
+        problem = {"file": f"{draft_key}.json", "error": date_error}
     if draft_key == "new":
         return new_editor_values(), problem
     if task is None or task.get("id") != draft_key:
@@ -60,7 +72,6 @@ def save_editor_draft(
     deadline: str,
     data_dir: Path = storage.DATA_DIR,
 ) -> dict[str, Any]:
-    """Собрать и сохранить независимый черновик редактора."""
     draft = {
         "task_id": task_id,
         "title": title,
@@ -111,16 +122,14 @@ def _validate_fields(values: dict[str, Any]) -> dict[str, str]:
 
 
 def _delete_valid_draft(draft_key: str, data_dir: Path) -> None:
-    """Удалить только корректный черновик; повреждённый файл сохранить."""
     draft, problem = storage.load_draft(draft_key, data_dir)
-    if draft is not None and problem is None:
+    if draft is not None and problem is None and _draft_date_error(draft) is None:
         storage.delete_draft(draft_key, data_dir)
 
 
 def create_task(
     values: dict[str, Any], data_dir: Path = storage.DATA_DIR
 ) -> dict[str, Any]:
-    """Создать и сохранить новое дело."""
     fields = _validate_fields(values)
     task = {
         "id": str(uuid4()),
@@ -139,10 +148,21 @@ def update_task(
     values: dict[str, Any],
     data_dir: Path = storage.DATA_DIR,
 ) -> dict[str, Any]:
-    """Обновить редактируемые поля существующего дела."""
     fields = _validate_fields(values)
     updated_task = deepcopy(task)
     updated_task.update(fields)
     storage.save_task(updated_task, data_dir)
     _delete_valid_draft(updated_task["id"], data_dir)
     return updated_task
+
+
+def close_task(
+    task: dict[str, Any], data_dir: Path = storage.DATA_DIR
+) -> dict[str, Any]:
+    if task.get("status") == "completed":
+        return deepcopy(task)
+    completed_task = deepcopy(task)
+    completed_task["status"] = "completed"
+    completed_task["completed_at"] = _now_iso()
+    storage.save_task(completed_task, data_dir)
+    return completed_task

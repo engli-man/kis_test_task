@@ -79,7 +79,16 @@ def _clear_editor(draft_key: str) -> None:
 
 storage.init_storage()
 tasks, problems = storage.load_tasks()
-tasks.sort(key=lambda task: (task["deadline"], task["title"].lower()))
+open_tasks = sorted(
+    (task for task in tasks if task["status"] == "open"),
+    key=lambda task: (task["deadline"], task["title"].lower()),
+)
+completed_tasks = sorted(
+    (task for task in tasks if task["status"] == "completed"),
+    key=lambda task: datetime.fromisoformat(task["completed_at"]),
+    reverse=True,
+)
+tasks = open_tasks + completed_tasks
 tasks_by_id = {task["id"]: task for task in tasks}
 
 if "pending_selection" in st.session_state:
@@ -101,7 +110,9 @@ def _task_label(task_id: str) -> str:
     if task_id == "new":
         return "＋ Новое дело"
     task = tasks_by_id[task_id]
-    return f"{task['title']} · до {task['deadline']}"
+    if task["status"] == "completed":
+        return f"✓ Завершено · {task['title']} · до {task['deadline']}"
+    return f"○ {task['title']} · до {task['deadline']}"
 
 
 st.sidebar.header("Дела")
@@ -125,16 +136,28 @@ if draft_problem:
 
 st.subheader("Новое дело" if selected_id == "new" else "Редактирование дела")
 callback_args = (selected_id, None if selected_id == "new" else selected_id)
+is_completed = selected_task is not None and selected_task["status"] == "completed"
+
+if is_completed:
+    completed_at = datetime.fromisoformat(selected_task["completed_at"])
+    st.success(
+        "Статус: завершено · "
+        f"{completed_at.astimezone().strftime('%d.%m.%Y, %H:%M')}"
+    )
+elif selected_task is not None:
+    st.info("Статус: открыто")
 
 st.text_input(
     "Название",
     key=_widget_key("title", selected_id),
+    disabled=is_completed,
     on_change=_save_draft,
     args=callback_args,
 )
 st.text_area(
     "Описание",
     key=_widget_key("description", selected_id),
+    disabled=is_completed,
     on_change=_save_draft,
     args=callback_args,
 )
@@ -144,6 +167,7 @@ with date_column:
     st.date_input(
         "Дата обещания",
         key=_widget_key("promised_date", selected_id),
+        disabled=is_completed,
         on_change=_save_draft,
         args=callback_args,
     )
@@ -152,6 +176,7 @@ with time_column:
         "Время обещания",
         key=_widget_key("promised_time", selected_id),
         step=60,
+        disabled=is_completed,
         on_change=_save_draft,
         args=callback_args,
     )
@@ -159,6 +184,7 @@ with deadline_column:
     st.date_input(
         "Дедлайн",
         key=_widget_key("deadline", selected_id),
+        disabled=is_completed,
         on_change=_save_draft,
         args=callback_args,
     )
@@ -166,10 +192,23 @@ with deadline_column:
 draft_error = st.session_state.get(_widget_key("draft_error", selected_id))
 if draft_error:
     st.error(f"Не удалось сохранить черновик: {draft_error}")
+elif is_completed:
+    st.caption("Завершённое дело доступно только для просмотра.")
 else:
     st.caption("Изменения полей автоматически сохраняются в локальный черновик.")
 
-if st.button("Сохранить", type="primary"):
+save_clicked = False
+close_clicked = False
+if selected_task is None:
+    save_clicked = st.button("Сохранить", type="primary")
+elif not is_completed:
+    save_column, close_column = st.columns(2)
+    with save_column:
+        save_clicked = st.button("Сохранить изменения", type="primary")
+    with close_column:
+        close_clicked = st.button("Закрыть дело")
+
+if save_clicked:
     values = _editor_values(selected_id)
     _save_draft(*callback_args)
     try:
@@ -181,6 +220,14 @@ if st.button("Сохранить", type="primary"):
         else:
             services.update_task(selected_task, values)
             st.session_state["flash_message"] = "Изменения сохранены."
+        st.rerun()
+    except (OSError, ValueError) as error:
+        st.error(str(error))
+
+if close_clicked:
+    try:
+        services.close_task(selected_task)
+        st.session_state["flash_message"] = "Дело закрыто."
         st.rerun()
     except (OSError, ValueError) as error:
         st.error(str(error))
