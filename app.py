@@ -130,11 +130,30 @@ def _task_label(task_id: str) -> str:
 
 st.sidebar.header("Дела")
 search_query = st.sidebar.text_input("Поиск по названию и описанию")
-visible_tasks = services.search_tasks(tasks, search_query)
+period_labels = {
+    "Все дела": "all",
+    "День": "day",
+    "Неделя": "week",
+    "Месяц": "month",
+    "Диапазон": "range",
+}
+period_label = st.sidebar.selectbox("Период", period_labels)
+selected_date = date.today()
+end_date = None
+if period_labels[period_label] == "range":
+    selected_date = st.sidebar.date_input("Дата начала")
+    end_date = st.sidebar.date_input("Дата окончания")
+elif period_labels[period_label] != "all":
+    selected_date = st.sidebar.date_input("Выбранная дата")
+
+matching_tasks = services.search_tasks(tasks, search_query)
+visible_tasks = services.filter_tasks_by_deadline(
+    matching_tasks, period_labels[period_label], selected_date, end_date
+)
 options = ["new", *(task["id"] for task in visible_tasks)]
 if st.session_state.get("selected_task_id") not in options:
     st.session_state["selected_task_id"] = "new"
-if search_query and not visible_tasks:
+if (search_query or period_labels[period_label] != "all") and not visible_tasks:
     st.sidebar.caption("Дела не найдены.")
 
 selected_id = st.sidebar.radio(

@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -213,3 +213,43 @@ def search_tasks(tasks: list[dict[str, Any]], query: str) -> list[dict[str, Any]
         if normalized_query in task["title"].casefold()
         or normalized_query in task["description"].casefold()
     ]
+
+
+def filter_tasks_by_deadline(
+    tasks: list[dict[str, Any]],
+    period: str,
+    selected_date: date,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    if period == "all":
+        return list(tasks)
+    if period not in {"day", "week", "month", "range"}:
+        raise InputValidationError("Неизвестный режим фильтрации.")
+    if not isinstance(selected_date, date):
+        raise InputValidationError("Для фильтрации нужна корректная дата.")
+    if period == "range":
+        if not isinstance(end_date, date):
+            raise InputValidationError("Укажите конец диапазона.")
+        if end_date < selected_date:
+            raise InputValidationError("Конец диапазона не может быть раньше начала.")
+
+    if period == "week":
+        period_start = selected_date - timedelta(days=selected_date.weekday())
+        period_end = period_start + timedelta(days=6)
+
+    filtered_tasks = []
+    for task in tasks:
+        deadline = date.fromisoformat(task["deadline"])
+        if period == "day" and deadline == selected_date:
+            filtered_tasks.append(task)
+        elif period == "week" and period_start <= deadline <= period_end:
+            filtered_tasks.append(task)
+        elif (
+            period == "month"
+            and deadline.year == selected_date.year
+            and deadline.month == selected_date.month
+        ):
+            filtered_tasks.append(task)
+        elif period == "range" and selected_date <= deadline <= end_date:
+            filtered_tasks.append(task)
+    return filtered_tasks
